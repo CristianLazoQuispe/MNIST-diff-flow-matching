@@ -7,6 +7,7 @@ import gradio as gr
 import matplotlib.pyplot as plt
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from src.model import ConditionalUNet
+from huggingface_hub import hf_hub_download
 
 device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 img_shape = (1, 28, 28)
@@ -17,14 +18,25 @@ def resize(image,size=(200,200)):
     return stretch_near
         
 
+model_diff = ConditionalUNet().to(device)
+model_path = hf_hub_download(repo_id="CristianLazoQuispe/MNIST_Diff_Flow_matching", filename="outputs/diffusion/diffusion_model.pth",
+                        cache_dir="models")
+print("Diff Downloaded!")
+model_diff.load_state_dict(torch.load(model_path, map_location=device))
+model_diff.eval()
+
+
+model_flow = ConditionalUNet().to(device)
+model_path = hf_hub_download(repo_id="CristianLazoQuispe/MNIST_Diff_Flow_matching", filename="outputs/flow_matching/flow_model.pth",
+                        cache_dir="models")
+print("Flow Downloaded!")
+model_flow.load_state_dict(torch.load(model_path, map_location=device))
+model_flow.eval()
 
 @torch.no_grad()
 def generate_diffusion_intermediates(label):
     timesteps = 500
     img_shape = (1, 28, 28)
-    model = ConditionalUNet().to(device)
-    model.load_state_dict(torch.load("outputs/diffusion/diffusion_model.pth", map_location=device))
-    model.eval()
     betas = torch.linspace(1e-4, 0.02, timesteps)
     alphas = 1.0 - betas
     alphas_cumprod = torch.cumprod(alphas, dim=0).to(device)
@@ -36,7 +48,7 @@ def generate_diffusion_intermediates(label):
 
     for t in reversed(range(timesteps)):
         t_tensor = torch.full((x.size(0),), t, device=device, dtype=torch.float)
-        noise_pred = model(x, t_tensor, y)
+        noise_pred = model_diff(x, t_tensor, y)
         x = (1 / alphas[t].sqrt()) * (x - noise_pred * betas[t] / (1 - alphas_cumprod[t]).sqrt() )
         if t > 0:
             noise = torch.randn(1, *img_shape).to(device)
@@ -79,11 +91,6 @@ def generate_localized_noise(shape, radius=5):
 
 @torch.no_grad()
 def generate_flow_intermediates(label):
-    model = ConditionalUNet().to(device)
-    model.load_state_dict(torch.load("outputs/flow_matching/flow_model.pth", map_location=device))
-    
-    model.eval()
-
     x = torch.randn(1, *img_shape).to(device)
     #x = generate_localized_noise((1, 1, 28, 28), radius=12).to(device)
     y = torch.full((1,), label, dtype=torch.long, device=device)
@@ -95,7 +102,7 @@ def generate_flow_intermediates(label):
     for i in range(steps):
             
         t = torch.full((1,), i * dt, device=device)
-        v = model(x, t, y)
+        v = model_flow(x, t, y)
         x = x + v * dt
 
         if i in [100,200,300,400,499]:
