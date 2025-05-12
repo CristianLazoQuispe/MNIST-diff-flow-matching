@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 # --- Configuración ---
 device = 'cuda:4' if torch.cuda.is_available() else 'cpu'
 batch_size = 128
-timesteps = 100
+timesteps = 500
 img_shape = (1, 28, 28)
 betas = torch.linspace(1e-4, 0.02, timesteps)
 alphas = 1.0 - betas
@@ -103,12 +103,12 @@ class ConditionalUNet(nn.Module):
 
         out = self.out_conv(F.silu(self.out_norm(d1)))
         return out
-        
+
 # --- Entrenamiento con DDPM ---
-def train_diffusion(epochs=100,save_imgs=False, model_name="diffusion_model"):
+def train_diffusion(epochs=100, save_imgs=False, model_name="diffusion_model"):
     model = ConditionalUNet().to(device)
     opt = torch.optim.Adam(model.parameters(), lr=1e-3)
-    
+
     for epoch in range(epochs):
         model.train()
         pbar = tqdm(dataloader, desc=f"[Epoch {epoch}]", leave=True, ncols=80)
@@ -126,7 +126,7 @@ def train_diffusion(epochs=100,save_imgs=False, model_name="diffusion_model"):
             opt.step()
             pbar.set_postfix({"loss": f"{loss.item():.4f}"})
 
-        if (epoch + 1) % 10 == 0:
+        if (epoch + 1) % 1 == 0:
             if save_imgs:
                 generate_diffusion(9, model, save_path=f"outputs/diffusion/images/sample_epoch{epoch+1}.png")
         torch.save(model.state_dict(), f"outputs/diffusion/{model_name}.pth")
@@ -143,12 +143,13 @@ def generate_diffusion(label, model=None, save_path=None, show=False):
 
     for t in reversed(range(timesteps)):
         t_tensor = torch.full((x.size(0),), t, device=device, dtype=torch.float)
-        eps_pred = model(x, t_tensor, y)
-        alpha_t = alphas[t]
-        alpha_bar = alphas_cumprod[t]
-        x0_pred = (x - (1 - alpha_bar).sqrt() * eps_pred) / alpha_bar.sqrt()
-        noise = torch.randn_like(x) if t > 0 else torch.zeros_like(x)
-        x = alpha_t.sqrt() * x0_pred + (1 - alpha_t).sqrt() * noise
+        noise_pred = model(x, t_tensor, y)
+        x = (1 / alphas[t].sqrt()) * (x - noise_pred * betas[t] / (1 - alphas_cumprod[t]).sqrt() )
+        if t > 0:
+            noise = torch.randn(64, *img_shape).to(device)
+            v = (1 - alphas_cumprod[t - 1]) / (1 - alphas_cumprod[t]) * betas[t]
+            x += v.sqrt() * noise
+            
         x = x.clamp(-1, 1)
 
     img = (x + 1) / 2
@@ -162,4 +163,4 @@ def generate_diffusion(label, model=None, save_path=None, show=False):
 # --- Ejecutar ---
 # train_diffusion()
 # generate_diffusion(9)
-train_diffusion(epochs=100,save_imgs=True, model_name="diffusion_model")
+train_diffusion(epochs=100, save_imgs=True, model_name="diffusion_model")
