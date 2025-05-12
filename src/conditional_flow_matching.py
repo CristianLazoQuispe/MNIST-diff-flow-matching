@@ -1,5 +1,5 @@
 """Implements Conditional Flow Matcher Losses."""
-
+#https://github.com/atong01/conditional-flow-matching/blob/main/examples/images/conditional_mnist.ipynb
 # Author: Alex Tong
 #         Kilian Fatras
 #         +++

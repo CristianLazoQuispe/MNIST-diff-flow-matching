@@ -312,51 +312,40 @@ device = 'cuda:1' if torch.cuda.is_available() else 'cpu'
 timesteps = 100
 img_shape = (1, 28, 28)
 
+import gradio as gr
+from torchvision.transforms.functional import resize as tv_resize
+from PIL import Image
+
 @torch.no_grad()
 def generate_diffusion_intermediates(label):
     model = ConditionalUNet().to(device)
-    #model = SimpleConditionalUnet().to(device)
-    model.load_state_dict(torch.load("outputs/diffusion/diffusion_model2.pth", map_location=device))
+    model.load_state_dict(torch.load("outputs/diffusion/diffusion_model.pth", map_location=device))
     model.eval()
+    timesteps = 100
+    img_shape = (1, 28, 28)
+    betas = torch.linspace(1e-4, 0.02, timesteps)
+    alphas = 1.0 - betas
+    alphas_cumprod = torch.cumprod(alphas, dim=0).to(device)
 
     x = torch.randn(1, *img_shape).to(device)
-    y = torch.full((1,), label, dtype=torch.long, device=device)
-    betas = torch.linspace(1e-4, 0.02, timesteps).to(device)
-    alphas = 1 - betas
-    alpha_hat = torch.cumprod(alphas, dim=0)
+    y = torch.tensor([label], dtype=torch.long, device=device)
 
-    #x = (x + 1) / 2.0  # Map from [-1,1] to [0,1]
-    #x = x.clamp(0, 1)
+    intermediates = [resize(((x + 1) / 2.0)[0][0].clamp(0, 1).cpu().numpy())]
 
-    images = [(x + 1) / 2.0]  # initial noise
-    print("diffusion:")
-    print("x:",x.min(),x.max())
-    print("images:",images[0].min(),images[0].max())
     for t in reversed(range(timesteps)):
-        if t in [25,50,75]:
-            print("append","x:",x.min(),x.max())
-            images.append((x + 1) / 2.0)
-        t_batch = torch.full((1,), t, device=device, dtype=torch.long)
-        eps_pred = model(x, t_batch.float(), y)
+        t_tensor = torch.full((1,), t, device=device, dtype=torch.float)
+        eps_pred = model(x, t_tensor, y)
         alpha_t = alphas[t]
-        alpha_bar_t = alpha_hat[t]
-        x0_pred = (x - (1 - alpha_bar_t).sqrt() * eps_pred) / alpha_bar_t.sqrt()
-        x0_pred = x0_pred.clamp(-1, 1)
+        alpha_bar = alphas_cumprod[t]
+        x0_pred = (x - (1 - alpha_bar).sqrt() * eps_pred) / alpha_bar.sqrt()
         noise = torch.randn_like(x) if t > 0 else torch.zeros_like(x)
         x = alpha_t.sqrt() * x0_pred + (1 - alpha_t).sqrt() * noise
         x = x.clamp(-1, 1)
+        if t in [99, 75, 50, 25, 0]:
+            img_np = ((x + 1) / 2)[0, 0].cpu().numpy()# * 255
+            intermediates.append(resize(img_np))
 
-        
-    images.append((x + 1) / 2.0)
-    print(images[0].shape)
-    print(images[0][0].shape)
-    print(images[0][0,:,:].shape)
-    print(images[0][0].clamp(0, 1).cpu().numpy().shape)
-    print(images[0][0,:,:].clamp(0, 1).cpu().numpy().shape)
-    print(images[0][0][0].clamp(0, 1).cpu().numpy().shape)
-    
-    return [resize(images[0][0][0].clamp(0, 1).cpu().numpy())]+[resize(img[0][0].clamp(0, 1).cpu().numpy()) for img in images[-5:]]
-
+    return intermediates
 
 def generate_localized_noise(shape, radius=5):
     """Genera una imagen con ruido solo en un círculo en el centro."""
