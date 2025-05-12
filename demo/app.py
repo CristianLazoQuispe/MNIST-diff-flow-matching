@@ -1,11 +1,11 @@
 import os
-import cv2
 import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+import cv2
 import torch
 import numpy as np
 import gradio as gr
 import matplotlib.pyplot as plt
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from src.model import ConditionalUNet
 from huggingface_hub import hf_hub_download
 
@@ -19,16 +19,18 @@ def resize(image,size=(200,200)):
         
 
 model_diff = ConditionalUNet().to(device)
-model_path = hf_hub_download(repo_id="CristianLazoQuispe/MNIST_Diff_Flow_matching", filename="outputs/diffusion/diffusion_model.pth",
-                        cache_dir="models")
+#model_path = hf_hub_download(repo_id="CristianLazoQuispe/MNIST_Diff_Flow_matching", filename="outputs/diffusion/diffusion_model.pth",
+#                        cache_dir="models")
+model_path = "outputs/diffusion/diffusion_model.pth"
 print("Diff Downloaded!")
 model_diff.load_state_dict(torch.load(model_path, map_location=device))
 model_diff.eval()
 
 
 model_flow = ConditionalUNet().to(device)
-model_path = hf_hub_download(repo_id="CristianLazoQuispe/MNIST_Diff_Flow_matching", filename="outputs/flow_matching/flow_model.pth",
-                        cache_dir="models")
+#model_path = hf_hub_download(repo_id="CristianLazoQuispe/MNIST_Diff_Flow_matching", filename="outputs/flow_matching/flow_model.pth",
+#                        cache_dir="models")
+model_path = "outputs/flow_matching/flow_model.pth"
 print("Flow Downloaded!")
 model_flow.load_state_dict(torch.load(model_path, map_location=device))
 model_flow.eval()
@@ -94,7 +96,7 @@ def generate_flow_intermediates(label):
     x = torch.randn(1, *img_shape).to(device)
     #x = generate_localized_noise((1, 1, 28, 28), radius=12).to(device)
     y = torch.full((1,), label, dtype=torch.long, device=device)
-    steps = 500
+    steps = 50
     dt = 1.0 / steps
     
     images = [(x + 1) / 2.0]  # initial noise
@@ -105,10 +107,10 @@ def generate_flow_intermediates(label):
         v = model_flow(x, t, y)
         x = x + v * dt
 
-        if i in [100,200,300,400,499]:
+        if i in [10,20,30,40,49]:
             images.append((x + 1) / 2.0)
             # Compute velocity magnitude and convert to numpy for visualization
-        if i in [0,100,200,300,400,499]:
+        if i in [0,10,20,30,40,49]:
             v_mag = dt*v[0, 0].abs().clamp(0, 3).cpu().numpy()  # Clamp to max value for better contrast
             v_mag = (v_mag - v_mag.min()) / (v_mag.max() - v_mag.min() + 1e-5)
             vel_colored = plt.get_cmap("coolwarm")(v_mag)[:, :, :3]  # (H,W,3)
@@ -150,24 +152,24 @@ with gr.Blocks() as demo:
         with gr.Row():
             outs_f = [
                 gr.Image(label="Noise"),
-                gr.Image(label="Flow step=100"),
-                gr.Image(label="Flow step=200"),
-                gr.Image(label="Flow step=300"),
-                gr.Image(label="Flow step=400"),
-                gr.Image(label="Flow step=499"),
+                gr.Image(label="Flow step=10"),
+                gr.Image(label="Flow step=20"),
+                gr.Image(label="Flow step=30"),
+                gr.Image(label="Flow step=40"),
+                gr.Image(label="Flow step=49"),
             ]
         with gr.Row():
             #100,200,300,400,499
             flow_vel_imgs = [
                 gr.Image(label="Velocity step=0"),
-                gr.Image(label="Velocity step=100"),
-                gr.Image(label="Velocity step=200"),
-                gr.Image(label="Velocity step=300"),
-                gr.Image(label="Velocity step=400"),
-                gr.Image(label="Velocity step=499")
+                gr.Image(label="Velocity step=10"),
+                gr.Image(label="Velocity step=20"),
+                gr.Image(label="Velocity step=30"),
+                gr.Image(label="Velocity step=40"),
+                gr.Image(label="Velocity step=49")
             ]
 
         btn_f.click(fn=generate_flow_intermediates, inputs=label_f, outputs=outs_f+flow_vel_imgs)
 
-#demo.launch()
-demo.launch(share=False, server_port=9070)
+demo.launch()
+#demo.launch(share=False, server_port=9070)
