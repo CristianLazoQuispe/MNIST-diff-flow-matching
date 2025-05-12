@@ -1,20 +1,20 @@
-# conditional_mnist_diffusion_flow.py
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torchvision import datasets, transforms, utils
-from torch.utils.data import DataLoader
-from tqdm import tqdm
 import os
 import sys
 import numpy as np
+import torch
+from tqdm import tqdm
 import matplotlib.pyplot as plt
+from torchvision import  utils
+import torch.nn.functional as F
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from src.conditional_unet import ConditionalUNet
+from src.model import ConditionalUNet
+from src.utils import set_seed
+from src.dataset import get_data
+set_seed(42)
 
 
 # --- Configuration ---
-device = 'cuda:4' if torch.cuda.is_available() else 'cpu'
+device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 batch_size = 128
 timesteps = 500
 img_shape = (1, 28, 28)
@@ -22,20 +22,11 @@ betas = torch.linspace(1e-4, 0.02, timesteps)
 alphas = 1.0 - betas
 alphas_cumprod = torch.cumprod(alphas, dim=0).to(device)
 
-os.makedirs("outputs/diffusion/images", exist_ok=True)
+os.makedirs("outputs/diffusion", exist_ok=True)
+os.makedirs("outputs/diffusion/images/", exist_ok=True)
 
 # --- Dataset ---
-transform = transforms.Compose([
-    transforms.ToTensor(),
-    transforms.Lambda(lambda x: x * 2 - 1)
-])
-
-full_dataset = datasets.MNIST(root='data', train=True, download=True, transform=transform)
-train_size = int(0.9 * len(full_dataset))
-val_size = len(full_dataset) - train_size
-train_dataset, val_dataset = torch.utils.data.random_split(full_dataset, [train_size, val_size])
-train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+train_loader, val_loader = get_data(batch_size=batch_size)
 
 
 # --- DDPM Training ---
@@ -64,7 +55,7 @@ def train_diffusion(epochs=100, save_imgs=False, model_name="diffusion_model"):
         model.eval()
         val_losses = []
         with torch.no_grad():
-            val_bar = tqdm(val_loader, desc=f"[Val Epoch {epoch}]", leave=True, ncols=100)
+            val_bar = tqdm(val_loader, desc=f"[Val   Epoch {epoch}]", leave=True, ncols=100)
             for x0, labels in val_bar:
                 x0, labels = x0.to(device), labels.to(device)
                 t = torch.randint(0, timesteps, (x0.size(0),), device=device)
@@ -115,4 +106,4 @@ def generate_diffusion(label, model=None, save_path=None, show=False):
         plt.title(f'Generated {label}')
         plt.show()
 
-train_diffusion(epochs=100, save_imgs=True, model_name="diffusion_model")
+train_diffusion(epochs=100, save_imgs=True, model_name="diffusion_model_aux")

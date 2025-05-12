@@ -1,49 +1,32 @@
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torchvision import datasets, transforms, utils
-from torch.utils.data import DataLoader
-from tqdm import tqdm
 import os
 import sys
 import numpy as np
+import torch
+from tqdm import tqdm
 import matplotlib.pyplot as plt
-import sys
-import os
+from torchvision import  utils
+import torch.nn.functional as F
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from src.conditional_unet import ConditionalUNet
-
+from src.model import ConditionalUNet
+from src.utils import set_seed
+from src.dataset import get_data
+set_seed(42)
 
 # --- Configuración ---
-device = 'cuda:5' if torch.cuda.is_available() else 'cpu'
+device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 batch_size = 128
 timesteps = 100
 img_shape = (1, 28, 28)
-os.makedirs("outputs/diffusion", exist_ok=True)
 os.makedirs("outputs/flow_matching", exist_ok=True)
-os.makedirs("outputs/diffusion/images/", exist_ok=True)
 os.makedirs("outputs/flow_matching/images/", exist_ok=True)
 
+
 # --- Dataset ---
-transform = transforms.Compose([
-    transforms.ToTensor(),
-    transforms.Lambda(lambda x: x * 2 - 1)
-])
-full_dataset = datasets.MNIST(root='data', train=True, download=True, transform=transform)
-train_size = int(0.9 * len(full_dataset))
-val_size = len(full_dataset) - train_size
-train_dataset, val_dataset = torch.utils.data.random_split(full_dataset, [train_size, val_size])
-train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+train_loader, val_loader = get_data(batch_size=batch_size)
 
-
-
-# --- Entrenamiento Flow Matching ---
-def train_flow(epochs=1000,save_imgs=True,model_name="flow_model"):
-    #model = nn.DataParallel(FlowModel(), device_ids=[0,1,2,3,4,5]).to(device)
-    
+# --- Flow Matching ---
+def train_flow(epochs=1000,save_imgs=True,model_name="flow_model"):    
     model = ConditionalUNet().to(device)
-
     opt = torch.optim.Adam(model.parameters(), lr=0.0001)
     min_val_loss =np.inf
 
@@ -73,7 +56,7 @@ def train_flow(epochs=1000,save_imgs=True,model_name="flow_model"):
         model.eval()
         val_losses = []
         with torch.no_grad():
-            val_bar = tqdm(val_loader, desc=f"[Val Epoch {epoch}]", leave=True, ncols=100)
+            val_bar = tqdm(val_loader, desc=f"[Val   Epoch {epoch}]", leave=True, ncols=100)
             for x_real, y in val_bar:
                 x_real = x_real.to(device)
                 y = y.to(device)
@@ -81,19 +64,13 @@ def train_flow(epochs=1000,save_imgs=True,model_name="flow_model"):
                 t = torch.rand(x_real.size(0), device=device)
                 x_t = (1 - t.view(-1, 1, 1, 1)) * x_noise + t.view(-1, 1, 1, 1) * x_real
                 v_target = x_real - x_noise
-                #t, x_t, v_target = FM.sample_location_and_conditional_flow(x_noise, x_real)
                 v_pred = model(x_t, t, y)
                 mse = torch.mean((v_pred - v_target) ** 2)
-                norm_pred = F.log_softmax(v_pred.view(v_pred.size(0), -1), dim=1)
-                norm_true = F.softmax(v_target.view(v_target.size(0), -1), dim=1)
-                kl = F.kl_div(norm_pred, norm_true, reduction='batchmean')
-                val_loss = mse# + 0.1 * kl
+                val_loss = mse
                 val_losses.append(val_loss.item())
                 val_bar.set_postfix({"loss": f"{np.mean(val_losses):.4f}"})
 
         avg_val_loss = np.mean(val_losses)
-        #print(f"Validation Loss: {avg_val_loss:.4f}")
-
         if avg_val_loss < min_val_loss:
             min_val_loss = avg_val_loss
             print("Saving best model!")
@@ -104,7 +81,7 @@ def train_flow(epochs=1000,save_imgs=True,model_name="flow_model"):
 
     torch.save(model.state_dict(), f"outputs/flow_matching/{model_name}.pth")
 
-# --- Generación Flow Condicional ---
+# --- Generation Flow Conditional ---
 @torch.no_grad()
 def generate_flow(label, model=None, save_path=None, show=False):
     if model is None:
@@ -132,8 +109,6 @@ def generate_flow(label, model=None, save_path=None, show=False):
 
 # train_flow()
 # generate_flow(9)
-
-
-train_flow(epochs=10000,save_imgs=True,model_name="flow_model2_unet")
+train_flow(epochs=100,save_imgs=True,model_name="flow_model_aux")
 
 
