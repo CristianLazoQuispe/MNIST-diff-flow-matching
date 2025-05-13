@@ -24,6 +24,7 @@ def resize(image,size=(200,200)):
 model_diff = ConditionalUNet().to(device)
 model_path = hf_hub_download(repo_id="CristianLazoQuispe/MNIST_Diff_Flow_matching", filename="outputs/diffusion/diffusion_model.pth",
                         cache_dir="models")
+#model_path = "outputs/diffusion/diffusion_model.pth"
 print("Diff Downloaded!")
 model_diff.load_state_dict(torch.load(model_path, map_location=device))
 model_diff.eval()
@@ -32,6 +33,7 @@ model_diff.eval()
 model_flow = ConditionalUNet().to(device)
 model_path = hf_hub_download(repo_id="CristianLazoQuispe/MNIST_Diff_Flow_matching", filename="outputs/flow_matching/flow_model.pth",
                         cache_dir="models")
+#model_path = "outputs/flow_matching/flow_model.pth"
 print("Flow Downloaded!")
 model_flow.load_state_dict(torch.load(model_path, map_location=device))
 model_flow.eval()
