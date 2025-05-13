@@ -12,8 +12,7 @@ from src.model import ConditionalUNet
 from huggingface_hub import hf_hub_download
 import time
 device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
-
-device = 'cpu'
+#device = 'cpu'
 img_shape = (1, 28, 28)
 
 
@@ -76,12 +75,12 @@ def generate_diffusion_intermediates_streaming(label):
             vel_colored = (vel_colored * 255).astype(np.uint8)
             outputs[step_idx] = resize(vel_colored)
             yield tuple(outputs)
-            time.sleep(0.5)
+            #time.sleep(0.5)
 
         if t in [400, 300, 200, 100, 1, 0]:
             step_idx = {400: 1, 300: 2, 200: 3, 100: 4, 1: 5, 0 :12}[t]
             if t==0:
-                outputs[step_idx] = resize(((x + 1) / 2.0)[0, 0].cpu().numpy(),(400,400))
+                outputs[step_idx] = resize(((x + 1) / 2.0)[0, 0].cpu().numpy(),(300,300))
             else:
                 outputs[step_idx] = resize(((x + 1) / 2.0)[0, 0].cpu().numpy())
             yield tuple(outputs)
@@ -135,7 +134,10 @@ def generate_flow_intermediates_streaming(label):
         if i in [10,20,30,40,48,49]:
             #images.append((x + 1) / 2.0)
             step_idx = {10: 1, 20: 2, 30: 3, 40: 4, 48: 5, 49:12}[i]
-            outputs[step_idx] = resize(((x + 1) / 2.0)[0, 0].clamp(0, 1).cpu().numpy())
+            if i==49:
+                outputs[step_idx] = resize(((x + 1) / 2.0)[0, 0].clamp(0, 1).cpu().numpy(),(300,300))
+            else:
+                outputs[step_idx] = resize(((x + 1) / 2.0)[0, 0].clamp(0, 1).cpu().numpy())
             yield tuple(outputs)
 
             # Compute velocity magnitude and convert to numpy for visualization
@@ -145,12 +147,9 @@ def generate_flow_intermediates_streaming(label):
             vel_colored = plt.get_cmap("coolwarm")(v_mag)[:, :, :3]  # (H,W,3)
             vel_colored = (vel_colored * 255).astype(np.uint8)
             step_idx = {0: 6, 11: 7, 21: 8, 31: 9, 41: 10, 49:11}[i]
-            if i==49:
-                outputs[step_idx] = resize(vel_colored, (400, 400))
-            else:
-                outputs[step_idx] = resize(vel_colored)
+            outputs[step_idx] = resize(vel_colored)
             yield tuple(outputs)
-
+            #time.sleep(0.5)
 
 with gr.Blocks() as demo:
     gr.Markdown("# Conditional MNIST Generation: Diffusion vs Flow Matching")
