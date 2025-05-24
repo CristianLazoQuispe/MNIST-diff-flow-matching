@@ -14,7 +14,7 @@ set_seed(42)
 
 
 # --- Configuration ---
-device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+device = 'cuda:1' if torch.cuda.is_available() else 'cpu'
 batch_size = 128
 timesteps = 500
 img_shape = (1, 28, 28)
@@ -26,7 +26,7 @@ os.makedirs("outputs/diffusion", exist_ok=True)
 os.makedirs("outputs/diffusion/images/", exist_ok=True)
 
 # --- Dataset ---
-train_loader, val_loader = get_data(batch_size=batch_size)
+train_loader, val_loader = get_data(batch_size=batch_size,img_shape=img_shape)
 
 
 # --- DDPM Training ---
@@ -75,7 +75,7 @@ def train_diffusion(epochs=100, save_imgs=False, model_name="diffusion_model"):
             print("Saving best model!")
             torch.save(model.state_dict(), f"outputs/diffusion/{model_name}.pth")
 
-        if (epoch + 1) % 10 == 0 and save_imgs:
+        if (epoch + 1) % 1 == 0 and save_imgs:
             generate_diffusion(9, model, save_path=f"outputs/diffusion/images/sample_epoch{epoch+1}.png")
 
 @torch.no_grad()
@@ -106,4 +106,4 @@ def generate_diffusion(label, model=None, save_path=None, show=False):
         plt.title(f'Generated {label}')
         plt.show()
 
-train_diffusion(epochs=100, save_imgs=True, model_name="diffusion_model_aux")
+train_diffusion(epochs=500, save_imgs=True, model_name="diffusion_model_aux")

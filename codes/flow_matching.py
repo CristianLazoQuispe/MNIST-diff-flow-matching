@@ -8,7 +8,7 @@ from torchvision import  utils
 import torch.nn.functional as F
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from src.model import ConditionalUNet
-from src.utils import set_seed
+from src.utils import set_seed,generate_centered_gaussian_noise
 from src.dataset import get_data
 set_seed(42)
 
@@ -20,12 +20,11 @@ img_shape = (1, 28, 28)
 os.makedirs("outputs/flow_matching", exist_ok=True)
 os.makedirs("outputs/flow_matching/images/", exist_ok=True)
 
-
 # --- Dataset ---
-train_loader, val_loader = get_data(batch_size=batch_size)
+train_loader, val_loader = get_data(batch_size=batch_size,img_shape=img_shape)
 
 # --- Flow Matching ---
-def train_flow(epochs=1000,save_imgs=True,model_name="flow_model"):    
+def train_flow(epochs=1000,save_imgs=True,model_name="flow_model",use_localized_noise = False):    
     model = ConditionalUNet().to(device)
     opt = torch.optim.Adam(model.parameters(), lr=0.0001)
     min_val_loss =np.inf
@@ -35,7 +34,11 @@ def train_flow(epochs=1000,save_imgs=True,model_name="flow_model"):
         for x_real, y in pbar:
             x_real = x_real.to(device)
             y = y.to(device)
-            x_noise = torch.randn_like(x_real)
+            if use_localized_noise:
+                x_noise = generate_centered_gaussian_noise(x_real.shape).to(device)
+            else:
+                x_noise = torch.randn_like(x_real)
+            
             t = torch.rand(x_real.size(0), device=device)
             x_t = (1 - t.view(-1, 1, 1, 1)) * x_noise + t.view(-1, 1, 1, 1) * x_real
             v_target = x_real - x_noise
@@ -60,7 +63,10 @@ def train_flow(epochs=1000,save_imgs=True,model_name="flow_model"):
             for x_real, y in val_bar:
                 x_real = x_real.to(device)
                 y = y.to(device)
-                x_noise = torch.randn_like(x_real)
+                if use_localized_noise:
+                    x_noise = generate_centered_gaussian_noise(x_real.shape).to(device)
+                else:
+                    x_noise = torch.randn_like(x_real)
                 t = torch.rand(x_real.size(0), device=device)
                 x_t = (1 - t.view(-1, 1, 1, 1)) * x_noise + t.view(-1, 1, 1, 1) * x_real
                 v_target = x_real - x_noise
@@ -77,19 +83,23 @@ def train_flow(epochs=1000,save_imgs=True,model_name="flow_model"):
             torch.save(model.state_dict(), f"outputs/flow_matching/{model_name}.pth")
         if (epoch + 1) % 10 == 0:
             if save_imgs:
-                generate_flow(9, model=model, save_path=f"outputs/flow_matching/images/sample_epoch{epoch+1}.png")
+                generate_flow(9, model=model, save_path=f"outputs/flow_matching/images/sample_epoch{epoch+1}.png",use_localized_noise=use_localized_noise)
 
     torch.save(model.state_dict(), f"outputs/flow_matching/{model_name}.pth")
 
 # --- Generation Flow Conditional ---
 @torch.no_grad()
-def generate_flow(label, model=None, save_path=None, show=False):
+def generate_flow(label, model=None, save_path=None, show=False,use_localized_noise=False):
     if model is None:
         model = ConditionalUNet().to(device)
         model.load_state_dict(torch.load("outputs/flow_matching/flow_model.pth"))
         model.eval()
 
-    x = torch.randn(64, *img_shape).to(device)
+    if use_localized_noise:
+        x = generate_centered_gaussian_noise((64, *img_shape)).to(device)
+    else:
+        x = torch.randn(64, *img_shape).to(device)
+
     y = torch.full((64,), label, dtype=torch.long, device=device)
     steps = 50
     dt = 1.0 / steps
@@ -109,6 +119,7 @@ def generate_flow(label, model=None, save_path=None, show=False):
 
 # train_flow()
 # generate_flow(9)
-train_flow(epochs=100,save_imgs=True,model_name="flow_model_aux")
+#train_flow(epochs=500,save_imgs=True,model_name="flow_model",use_localized_noise=False)
+train_flow(epochs=500,save_imgs=True,model_name="flow_model_localized_noise",use_localized_noise=True)
 
 
