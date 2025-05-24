@@ -31,21 +31,3 @@ def generate_centered_gaussian_noise(shape=(1, 1, 28, 28), sigma=5.0, mu=0):
 
     return localized_noise
 
-def generate_centered_gaussian_noise_old(shape, radius=10):
-    """Genera una imagen con ruido solo en un círculo en el centro."""
-    B, C, H, W = shape
-    assert C == 1, "Solo imágenes en escala de grises."
-
-    # Crear máscara circular
-    yy, xx = torch.meshgrid(torch.arange(H), torch.arange(W), indexing='ij')
-    center_y, center_x = H // 2, W // 2
-    mask = ((yy - center_y)**2 + (xx - center_x)**2) <= radius**2
-    mask = mask.float().unsqueeze(0).unsqueeze(0)  # (1, 1, H, W)
-
-    # Aplicar máscara a ruido
-    noise = torch.ones(B, C, H, W)
-    localized_noise = noise * mask + -1*(1-mask)  # solo hay ruido dentro del círculo
-    mask = ((yy - center_y)**2 + (xx - center_x)**2) >= (radius//2)**2
-    mask = mask.float().unsqueeze(0).unsqueeze(0)  # (1, 1, H, W)
-    localized_noise = localized_noise * mask + -1*(1-mask)  # solo hay ruido dentro del círculo
-    return localized_noise

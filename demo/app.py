@@ -1,53 +1,20 @@
 import os
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-import os
-import cv2
-import sys
 import torch
-import numpy as np
-import gradio as gr
-import matplotlib.pyplot as plt
-from src.model import ConditionalUNet
-from src.utils import generate_centered_gaussian_noise
-from huggingface_hub import hf_hub_download
 import time
-device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
-#device = 'cpu'
+import gradio as gr
+from src.utils import generate_centered_gaussian_noise
+from src.demo import resize,plot_flow,load_models,plot_diff
+
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 img_shape = (1, 28, 28)
-ENV = "LOCAL"
-NOISE_CENTERED=True
+ENV = "DEPLOY"
 TIME_SLEEP = 0.05
 
-def resize(image,size=(200,200)):
-    stretch_near = cv2.resize(image, size, interpolation = cv2.INTER_LINEAR)
-    return stretch_near
-        
-
-if ENV=="DEPLOY":
-    model_path = hf_hub_download(repo_id="CristianLazoQuispe/MNIST_Diff_Flow_matching", filename="outputs/diffusion/diffusion_model.pth",cache_dir="models")
-else:
-    model_path  = "outputs/diffusion/diffusion_model.pth"
-print("Diff Downloaded!")
-model_diff_standard  = ConditionalUNet().to(device)
-model_diff_standard.load_state_dict(torch.load(model_path, map_location=device))
-model_diff_standard.eval()
 
 
-model_flow = ConditionalUNet().to(device)
-if ENV=="DEPLOY":
-    model_path_standard  = hf_hub_download(repo_id="CristianLazoQuispe/MNIST_Diff_Flow_matching", filename="outputs/flow_matching/flow_model.pth",cache_dir="models")
-    model_path_localized = hf_hub_download(repo_id="CristianLazoQuispe/MNIST_Diff_Flow_matching", filename="outputs/flow_matching/flow_model_localized_noise.pth",cache_dir="models")
-else:
-    model_path_standard  = "outputs/flow_matching/flow_model.pth"
-    model_path_localized = "outputs/flow_matching/flow_model_localized_noise.pth"
-print("Flow Downloaded!")
-model_flow_standard  = ConditionalUNet().to(device)
-model_flow_standard.load_state_dict(torch.load(model_path_standard, map_location=device))
-model_flow_standard.eval()
-model_flow_localized = ConditionalUNet().to(device)
-model_flow_localized.load_state_dict(torch.load(model_path_localized, map_location=device))
-model_flow_localized.eval()
+model_diff_standard,model_flow_standard,model_flow_localized = load_models(ENV,device=device)
 
 
 @torch.no_grad()
@@ -56,9 +23,9 @@ def generate_diffusion_intermediates_streaming(label):
     betas = torch.linspace(1e-4, 0.02, timesteps)
     alphas = 1.0 - betas
     alphas_cumprod = torch.cumprod(alphas, dim=0).to(device)
+    model_diff = model_diff_standard
 
     x = torch.randn(1, *img_shape).to(device)
-    model_diff = model_diff_standard
     y = torch.tensor([label], dtype=torch.long, device=device)
 
     # Inicial
@@ -81,25 +48,8 @@ def generate_diffusion_intermediates_streaming(label):
             x += v.sqrt() * noise
         x = x.clamp(-1, 1)
 
+        outputs = plot_diff(outputs,x,t,noise_pred)
 
-        if t in [499, 399, 299, 199, 99, 0]:
-            step_idx = {499: 6, 399: 7, 299: 8, 199: 9, 99: 10, 0: 11}[t]
-            v_mag = noise_pred[0, 0].abs().clamp(0, 3).cpu().numpy()
-            v_mag = (v_mag - v_mag.min()) / (v_mag.max() - v_mag.min() + 1e-5)
-            vel_colored = plt.get_cmap("coolwarm")(v_mag)[:, :, :3]
-            vel_colored = (vel_colored * 255).astype(np.uint8)
-            outputs[step_idx] = resize(vel_colored)
-            yield tuple(outputs)
-
-        outputs[12] = resize(((x + 1) / 2.0)[0, 0].cpu().numpy(),(300,300))
-
-        if t in [400, 300, 200, 100, 1, 0]:
-            step_idx = {400: 1, 300: 2, 200: 3, 100: 4, 1: 5, 0 :12}[t]
-            if t==0:
-                outputs[step_idx] = resize(((x + 1) / 2.0)[0, 0].cpu().numpy(),(300,300))
-            else:
-                outputs[step_idx] = resize(((x + 1) / 2.0)[0, 0].cpu().numpy())
-            yield tuple(outputs)
         if t % 10 == 0:
             yield tuple(outputs)
             time.sleep(0.06)
@@ -108,6 +58,8 @@ def generate_diffusion_intermediates_streaming(label):
             time.sleep(TIME_SLEEP)
 
     yield tuple(outputs)
+
+
 
 
 @torch.no_grad()
@@ -134,31 +86,11 @@ def generate_flow_intermediates_streaming(label,noise_type):
     time.sleep(0.2)
 
 
-    for i in range(steps):
-            
+    for i in range(steps):            
         t = torch.full((1,), i * dt, device=device)
         v = model_flow(x, t, y)
         x = x + v * dt
-
-        outputs[12] =  resize(((x + 1) / 2.0)[0, 0].clamp(0, 1).cpu().numpy(),(300,300))
-        if i in [10,20,30,40,48,49]: #
-            step_idx = {10: 1, 20: 2, 30: 3, 40: 4, 48: 5,49:12}[i] #, 
-            if i==49:
-                outputs[step_idx] = resize(((x + 1) / 2.0)[0, 0].clamp(0, 1).cpu().numpy(),(300,300))
-            else:
-                outputs[step_idx] = resize(((x + 1) / 2.0)[0, 0].clamp(0, 1).cpu().numpy())
-            yield tuple(outputs)
-
-
-            # Compute velocity magnitude and convert to numpy for visualization
-        if i in [0,11,21,31,41,49]:
-            v_mag = dt*v[0, 0].abs().clamp(0, 3).cpu().numpy()  # Clamp to max value for better contrast
-            v_mag = (v_mag - v_mag.min()) / (v_mag.max() - v_mag.min() + 1e-5)
-            vel_colored = plt.get_cmap("coolwarm")(v_mag)[:, :, :3]  # (H,W,3)
-            vel_colored = (vel_colored * 255).astype(np.uint8)
-            step_idx = {0: 6, 11: 7, 21: 8, 31: 9, 41: 10, 49:11}[i]
-            outputs[step_idx] = resize(vel_colored)
-            yield tuple(outputs)
+        outputs = plot_flow(outputs,i,x,dt,v)
         if t % 10 == 0:
             yield tuple(outputs)
             time.sleep(0.06)
@@ -235,5 +167,6 @@ with gr.Blocks() as demo:
 
 if ENV=="DEPLOY":
     demo.launch()
+    #demo.launch(share=True, server_port=9071)
 else:
     demo.launch(share=True, server_port=9071)
