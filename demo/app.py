@@ -91,9 +91,9 @@ def generate_flow_intermediates_streaming(label,noise_type):
         v = model_flow(x, t, y)
         x = x + v * dt
         outputs = plot_flow(outputs,i,x,dt,v)
-        if t % 10 == 0:
+        if i % 2 == 0:
             yield tuple(outputs)
-            time.sleep(0.06)
+            time.sleep(0.2) # sleep to render properly in gradio
         if ENV=="LOCAL":
             time.sleep(TIME_SLEEP)
     yield tuple(outputs)
