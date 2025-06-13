@@ -4,7 +4,7 @@
   <img src="demo/demo.gif" alt="MNIST Diffusion vs Flow Matching" width="800"/>
 </div>
 
-An interactive demo comparing **Diffusion Models** and **Flow Matching** for conditional image generation on MNIST. Understand their dynamics step by step — and visually explore the difference between denoising and velocity-guided synthesis.
+An interactive demo comparing **Diffusion Models** and **Flow Matching** for conditional image generation on MNIST. Understand their dynamics step by step — and visually explore the difference between denoising and velocity-guided synthesis. 
 
 ---
 
@@ -47,6 +47,7 @@ An interactive demo comparing **Diffusion Models** and **Flow Matching** for con
 ├── src/             # Dataset, model and utilities
 ├── data/            # MNIST dataset (auto-downloaded)
 └── requirements.txt # Dependencies
+└── Understabding Flow Matching by Cristian Lazo Quispe # Notes of Flow Matching
 ```
 
 ## ⚙️ Installation
