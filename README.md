@@ -47,7 +47,7 @@ An interactive demo comparing **Diffusion Models** and **Flow Matching** for con
 ├── src/             # Dataset, model and utilities
 ├── data/            # MNIST dataset (auto-downloaded)
 └── requirements.txt # Dependencies
-└── Understabding Flow Matching by Cristian Lazo Quispe # Notes of Flow Matching
+└── Understanding Flow Matching by Cristian Lazo Quispe # Notes of Flow Matching
 ```
 
 ## ⚙️ Installation
